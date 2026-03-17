@@ -76,6 +76,59 @@ def make_sac_agent(seed, sample_obs, sample_action, discount=0.99):
         critic_subsample_size=2,
     )
 
+def make_sac_pixel_agent(seed, sample_obs, sample_action, image_keys, discount=0.99, encoder="small"):
+    encoders = {}
+
+    if encoder == "small":
+        encoders = {
+            image_key: SmallEncoder(
+                features=(32, 64, 128, 256),
+                kernel_sizes=(3, 3, 3, 3),
+                strides=(2, 2, 2, 2),
+                padding="VALID",
+                pool_method="avg",
+                bottleneck_dim=256,
+                spatial_block_size=8,
+                name=f"sac_encoder_{image_key}",
+            )
+            for image_key in image_keys
+        }
+    elif encoder == "equiv-encoder":
+        encoders = {
+            image_key: EquivariantEncoder(
+                output_channels=(32,64,128,256),
+                stride=1,
+                name=f"sac_equiv_encoder_{image_key}"
+            )
+            for image_key in image_keys
+        }
+
+    return SACAgent.create_pixels(
+        jax.random.PRNGKey(seed),
+        sample_obs,
+        sample_action,
+        policy_kwargs={
+            "tanh_squash_distribution": True,
+            "std_parameterization": "exp",
+            "std_min": 1e-5,
+            "std_max": 5,
+        },
+        critic_network_kwargs={
+            "activations": nn.tanh,
+            "use_layer_norm": True,
+            "hidden_dims": [256, 256],
+        },
+        policy_network_kwargs={
+            "activations": nn.tanh,
+            "use_layer_norm": True,
+            "hidden_dims": [256, 256],
+        },
+        temperature_init=1e-2,
+        discount=discount,
+        backup_entropy=False,
+        critic_ensemble_size=10,
+        critic_subsample_size=2,
+    )
 
 def make_drq_agent(
     seed,
